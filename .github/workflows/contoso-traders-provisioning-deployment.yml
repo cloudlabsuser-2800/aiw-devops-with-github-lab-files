@@ -170,35 +170,35 @@ jobs:
       - name: npm run build
         run: npm run build
         working-directory: src/ContosoTraders.Ui.Website
-      - name: deploy to storage
-        uses: azure/cli@v2
+      - name: deploy ui to storage
+        uses: azure/CLI@v1
         with:
           inlineScript: |
-            az storage blob upload-batch \
-              --account-name ${{ env.UI_STORAGE_ACCOUNT_NAME }}${{ secrets.ENVIRONMENT }} \
-              --destination '$web' \
-              --source src/ContosoTraders.Ui.Website/build \
-              --overwrite true
-      - name: purge AFD endpoint (safe)
-        uses: azure/cli@v2
+            mkdir -p /root/.azure/bin/
+            curl -o /root/.azure/bin/azcopy https://experienceazure.blob.core.windows.net/templates/devops-devsecops-hackathon/azcopy/azcopy
+            chmod +x /root/.azure/bin/azcopy
+            az storage blob sync --account-name '${{ env.UI_STORAGE_ACCOUNT_NAME }}${{ vars.SUFFIX }}' -c '$web' -s 'src/ContosoTraders.Ui.Website/build'
+      - name: purge ui cdn endpoint
+        uses: azure/CLI@v1
+        with:
+          inlineScript: az afd endpoint purge  --no-wait   --content-paths '/*' --endpoint-name "${{ env.UI_CDN_ENDPOINT_NAME }}${{ vars.SUFFIX }}" --profile-name "${{ env.CDN_PROFILE_NAME }}${{ vars.SUFFIX }}" --resource-group "${{ env.RESOURCE_GROUP_NAME }}${{ vars.SUFFIX }}"
+
+      - name: get ui cdn endpoint
+        uses: azure/CLI@v1
+        id: get-uiCdnEndpoint
+        with:
+          inlineScript: echo "uiCdnEndpoint"="$(az keyvault secret show --vault-name ${{ env.KV_NAME }}${{ vars.SUFFIX }} --name uiCdnEndpoint --query value -o tsv)" >> $GITHUB_OUTPUT
+      - name: register auth callback (UI CDN)
+        if: ${{ env.AADUSERNAME != '' && env.AADPASSWORD != '' }}
+        uses: azure/CLI@v1
         with:
           inlineScript: |
-            PROFILE_EXISTS=$(az afd profile list -g ${{ env.RESOURCE_GROUP_NAME }}${{ secrets.ENVIRONMENT }} --query "[?name=='${{ env.CDN_PROFILE_NAME }}${{ secrets.ENVIRONMENT }}'] | length(@)" -o tsv)
-            
-            if [ "$PROFILE_EXISTS" -eq "1" ]; then
-                ENDPOINT_NAME=$(az afd endpoint list \
-                  -g ${{ env.RESOURCE_GROUP_NAME }}${{ secrets.ENVIRONMENT }} \
-                  --profile-name ${{ env.CDN_PROFILE_NAME }}${{ secrets.ENVIRONMENT }} \
-                  --query "[0].name" -o tsv)
-                
-                echo "Purging AFD endpoint: $ENDPOINT_NAME"
-                
-                az afd endpoint purge --no-wait \
-                  --content-paths "/*" \
-                  --endpoint-name $ENDPOINT_NAME \
-                  -g ${{ env.RESOURCE_GROUP_NAME }}${{ secrets.ENVIRONMENT }} \
-                  --profile-name ${{ env.CDN_PROFILE_NAME }}${{ secrets.ENVIRONMENT }}
-                  --debug
-            else
-                echo "AFD profile '${{ env.CDN_PROFILE_NAME }}${{ secrets.ENVIRONMENT }}' not found. Skipping purge."
-            fi
+            az rest \
+              --method PATCH \
+              --uri https://graph.microsoft.com/v1.0/applications/${{ steps.get-azureAdAppObjId.outputs.azureAdAppObjId }} \
+              --headers 'Content-Type=application/json' \
+              --body '{"spa":{"redirectUris":["https://localhost:3000/authcallback","http://localhost:3000/authcallback","https://staging.contosotraders.com/authcallback","https://production.contosotraders.com/authcallback","https://cloudtesting.contosotraders.com/authcallback","https://${{ steps.get-uiCdnEndpoint.outputs.uiCdnEndpoint }}/authcallback"]}}'
+      - name: display ui cdn endpoint
+        uses: azure/CLI@v1
+        with:
+          inlineScript: echo UI CDN endpoint accessible at https://$(az keyvault secret show --vault-name ${{ env.KV_NAME }}${{ vars.SUFFIX }} --name uiCdnEndpoint --query value -o tsv)

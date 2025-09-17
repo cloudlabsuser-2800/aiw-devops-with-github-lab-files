@@ -274,7 +274,7 @@ jobs:
         run: npm run build
         working-directory: src/ContosoTraders.Ui.Website
       - name: deploy to storage
-        uses: azure/CLI@v2
+        uses: azure/CLI@v1
         with:         
           inlineScript: | az storage blob sync --account-name '${{ env.UI_STORAGE_ACCOUNT_NAME }}${{ secrets.ENVIRONMENT }}' -c '$web' -s 'src/ContosoTraders.Ui.Website/build'
 

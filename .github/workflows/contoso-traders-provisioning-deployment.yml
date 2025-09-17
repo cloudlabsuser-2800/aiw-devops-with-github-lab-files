@@ -179,25 +179,26 @@ jobs:
               --destination '$web' \
               --source src/ContosoTraders.Ui.Website/build \
               --overwrite true
-      - name: purge CDN endpoint (safe)
+      - name: purge AFD endpoint (safe)
         uses: azure/cli@v2
         with:
           inlineScript: |
-            PROFILE_EXISTS=$(az cdn profile list -g ${{ env.RESOURCE_GROUP_NAME }}${{ secrets.ENVIRONMENT }} --query "[?name=='${{ env.CDN_PROFILE_NAME }}${{ secrets.ENVIRONMENT }}'] | length(@)" -o tsv)
+            PROFILE_EXISTS=$(az afd profile list -g ${{ env.RESOURCE_GROUP_NAME }}${{ secrets.ENVIRONMENT }} --query "[?name=='${{ env.CDN_PROFILE_NAME }}${{ secrets.ENVIRONMENT }}'] | length(@)" -o tsv)
             
             if [ "$PROFILE_EXISTS" -eq "1" ]; then
-                ENDPOINT_NAME=$(az cdn endpoint list \
+                ENDPOINT_NAME=$(az afd endpoint list \
                   -g ${{ env.RESOURCE_GROUP_NAME }}${{ secrets.ENVIRONMENT }} \
                   --profile-name ${{ env.CDN_PROFILE_NAME }}${{ secrets.ENVIRONMENT }} \
                   --query "[0].name" -o tsv)
                 
-                echo "Purging CDN endpoint: $ENDPOINT_NAME"
+                echo "Purging AFD endpoint: $ENDPOINT_NAME"
                 
-                az cdn endpoint purge --no-wait \
+                az afd endpoint purge --no-wait \
                   --content-paths "/*" \
-                  -n $ENDPOINT_NAME \
+                  --endpoint-name $ENDPOINT_NAME \
                   -g ${{ env.RESOURCE_GROUP_NAME }}${{ secrets.ENVIRONMENT }} \
                   --profile-name ${{ env.CDN_PROFILE_NAME }}${{ secrets.ENVIRONMENT }}
+                  --debug
             else
-                echo "CDN profile '${{ env.CDN_PROFILE_NAME }}${{ secrets.ENVIRONMENT }}' not found. Skipping purge."
+                echo "AFD profile '${{ env.CDN_PROFILE_NAME }}${{ secrets.ENVIRONMENT }}' not found. Skipping purge."
             fi
